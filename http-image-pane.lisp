@@ -47,6 +47,7 @@
    (process               :reader http-image-pane-download-process :initform nil))
   (:default-initargs
    :background :white
+   :draw-with-buffer t
    :create-callback 'create-http-image-pane
    :destroy-callback 'destroy-http-image-pane
    :display-callback 'display-http-image-pane))
