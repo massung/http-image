@@ -109,32 +109,26 @@
 
 (defmethod http-image-pane-refresh ((pane http-image-pane))
   "Downloads a URL as an image into an image-pane."
-  (with-slots (image process url)
+  (with-slots (process url)
       pane
     (flet ((download ()
-             (with-url (url url)
-               (with-response (resp (http-get url))
-                 (let* ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp)))
-                        (ext (pathname-type (pathname (url-path url))))
-                        (type (second (assoc ext +image-types+ :test #'string-equal))))
-                   (apply-in-pane-process pane #'apply-image-data pane bytes type))))))
-      (setf process (mp:process-run-function "HTTP Image Download" '() #'download))
-      (setf image nil))
-
-    ;; redraw with no image
-    (prog1
-        url
-      (gp:invalidate-rectangle pane))))
+             (with-response (resp (http-get url))
+               (let* ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp)))
+                      (ext (pathname-type (pathname (url-path (request-url (response-request resp))))))
+                      (type (second (assoc ext +image-types+ :test #'string-equal))))
+                 (apply-in-pane-process pane #'apply-image-data pane bytes type)))))
+      (setf process (mp:process-run-function "HTTP Image Download" '() #'download)))
+    (gp:invalidate-rectangle pane)))
 
 (defmethod http-image-pane-stop ((pane http-image-pane))
   "Stop trying to download the image."
   (with-slots (process)
       pane
     (when process
-      (mp:process-kill pane)
+      (mp:process-kill process))
 
-      ;; reset
-      (setf process nil))))
+    ;; reset
+    (setf process nil)))
 
 (defmethod apply-image-data ((pane http-image-pane) bytes &optional type)
   "Given an array of bytes, load it into the image."
