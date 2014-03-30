@@ -156,7 +156,7 @@
                  (let ((cached-image (and cache-p (with-hash-table-locked cache
                                                     (gethash (format-url url) cache)))))
                    (unless cached-image
-                     (with-response (resp (http-get url) :timeout 10)
+                     (with-response (resp (http-follow (http-get url) :redirect-limit 2) :timeout 10)
                        (when-let (type (image-type resp))
                          (let ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp))))
                            (setf cached-image (make-cached-image :bytes bytes :type type))
