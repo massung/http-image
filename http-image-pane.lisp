@@ -44,6 +44,7 @@
 
 (defclass http-image-pane (output-pane)
   ((url         :initarg :url         :reader http-image-pane-url)
+   (error-p     :initarg :error       :reader http-image-pane-error-p          :initform nil)
    (cache-p     :initarg :cache       :reader http-image-pane-cache-p          :initform nil)
    (wait-image  :initarg :wait-image  :reader http-image-pane-wait-image       :initform nil)
    (error-image :initarg :error-image :reader http-image-pane-error-image      :initform nil)
@@ -137,7 +138,7 @@
 
 (defmethod http-image-pane-refresh ((pane http-image-pane))
   "Downloads a URL as an image into an image-pane."
-  (with-slots (cache cache-p process url image wait-image)
+  (with-slots (cache cache-p error-p process url image wait-image)
       pane
     (with-url (url url)
       (labels ((image-type (resp)
@@ -156,13 +157,16 @@
                  (let ((cached-image (and cache-p (with-hash-table-locked cache
                                                     (gethash (format-url url) cache)))))
                    (unless cached-image
-                     (with-response (resp (http-follow (http-get url) :redirect-limit 2) :timeout 10)
-                       (when-let (type (image-type resp))
-                         (let ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp))))
-                           (setf cached-image (make-cached-image :bytes bytes :type type))
-                           (when cache-p
-                             (with-hash-table-locked cache
-                               (setf (gethash (format-url url) cache) cached-image)))))))
+                     (handler-case
+                         (with-response (resp (http-follow (http-get url) :redirect-limit 2) :timeout 10)
+                           (when-let (type (image-type resp))
+                             (let ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp))))
+                               (setf cached-image (make-cached-image :bytes bytes :type type))
+                               (when cache-p
+                                 (with-hash-table-locked cache
+                                   (setf (gethash (format-url url) cache) cached-image))))))
+                       (error (c)
+                         (when error-p (error c)))))
 
                    ;; create the image only if a cached-image exists or the file downloaded successfully
                    (apply-in-pane-process pane #'apply-image-data pane cached-image))))
