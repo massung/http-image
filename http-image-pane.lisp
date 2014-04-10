@@ -142,8 +142,7 @@
       pane
     (with-url (url url)
       (labels ((image-type (resp)
-                 (let ((type (with-headers ((content-type "Content-Type"))
-                                 (response-headers resp)
+                 (let ((type (let ((content-type (http-header resp "Content-Type")))
                                (when (and content-type (eql (search "image/" content-type) 0))
                                  (subseq content-type 6))))
                        (ext (pathname-type (pathname (url-path (request-url (response-request resp)))))))
