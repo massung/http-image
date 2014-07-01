@@ -43,7 +43,7 @@
   "Known extensions for images.")
 
 (defclass http-image-pane (output-pane)
-  ((url         :initarg :url         :reader http-image-pane-url)
+  ((url         :initarg :url         :reader http-image-pane-url              :initform nil)
    (error-p     :initarg :error       :reader http-image-pane-error-p          :initform nil)
    (cache-p     :initarg :cache       :reader http-image-pane-cache-p          :initform nil)
    (wait-image  :initarg :wait-image  :reader http-image-pane-wait-image       :initform nil)
@@ -125,12 +125,13 @@
 
 (defmethod (setf http-image-pane-url) (image-url (pane http-image-pane))
   "Change the URL and refresh the pane."
-  (with-slots (url process)
+  (with-slots (image url process)
       pane
     (destroy-http-image-pane pane)
 
     ;; set the new url, clear any error, and the image
     (setf process nil
+          image nil
           url image-url)
 
     ;; refresh
@@ -140,42 +141,43 @@
   "Downloads a URL as an image into an image-pane."
   (with-slots (cache cache-p error-p process url image wait-image)
       pane
-    (with-url (url url)
-      (labels ((image-type (resp)
-                 (let ((type (let ((content-type (http-header resp "Content-Type")))
-                               (when (and content-type (eql (search "image/" content-type) 0))
-                                 (subseq content-type 6))))
-                       (ext (pathname-type (pathname (url-path (request-url (response-request resp)))))))
-
-                   ;; use the Content-Type, if that fails, try the file extension
-                   (second (or (assoc type +image-types+ :test #'string-equal)
-                               (assoc ext +image-types+ :test #'string-equal)))))
-
-               ;; lookup cached image or download it
-               (download ()
-                 (let ((cached-image (and cache-p (with-hash-table-locked cache
-                                                    (gethash (format-url url) cache)))))
-                   (unless cached-image
-                     (handler-case
-                         (with-response (resp (http-follow (http-get url) :redirect-limit 2) :timeout 10)
-                           (when-let (type (image-type resp))
-                             (let ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp))))
-                               (setf cached-image (make-cached-image :bytes bytes :type type))
-                               (when cache-p
-                                 (with-hash-table-locked cache
-                                   (setf (gethash (format-url url) cache) cached-image))))))
-                       (error (c)
-                         (when error-p (error c)))))
-
-                   ;; create the image only if a cached-image exists or the file downloaded successfully
-                   (apply-in-pane-process pane #'apply-image-data pane cached-image))))
-        (setf process (mp:process-run-function "HTTP Image Download" '() #'download)))
-
-      ;; set the current image to the wait image
-      (setf image wait-image)
-
-      ;; redraw the pane
-      (gp:invalidate-rectangle pane))))
+    (when url
+      (with-url (url url)
+        (labels ((image-type (resp)
+                   (let ((type (let ((content-type (http-header resp "Content-Type")))
+                                 (when (and content-type (eql (search "image/" content-type) 0))
+                                   (subseq content-type 6))))
+                         (ext (pathname-type (pathname (url-path (request-url (response-request resp)))))))
+                     
+                     ;; use the Content-Type, if that fails, try the file extension
+                     (second (or (assoc type +image-types+ :test #'string-equal)
+                                 (assoc ext +image-types+ :test #'string-equal)))))
+                 
+                 ;; lookup cached image or download it
+                 (download ()
+                   (let ((cached-image (and cache-p (with-hash-table-locked cache
+                                                      (gethash (format-url url) cache)))))
+                     (unless cached-image
+                       (handler-case
+                           (with-response (resp (http-follow (http-get url) :redirect-limit 2) :timeout 10)
+                             (when-let (type (image-type resp))
+                               (let ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp))))
+                                 (setf cached-image (make-cached-image :bytes bytes :type type))
+                                 (when cache-p
+                                   (with-hash-table-locked cache
+                                     (setf (gethash (format-url url) cache) cached-image))))))
+                         (error (c)
+                           (when error-p (error c)))))
+                     
+                     ;; create the image only if a cached-image exists or the file downloaded successfully
+                     (apply-in-pane-process pane #'apply-image-data pane cached-image))))
+          (setf process (mp:process-run-function "HTTP Image Download" '() #'download)))
+        
+        ;; set the current image to the wait image
+        (setf image wait-image)))
+        
+    ;; redraw the pane
+    (gp:invalidate-rectangle pane)))
 
 (defmethod http-image-pane-stop ((pane http-image-pane))
   "Stop trying to download the image."
