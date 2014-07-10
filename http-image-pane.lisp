@@ -24,6 +24,7 @@
 
    ;; pane methods
    #:http-image-pane-url
+   #:http-image-pane-best-fit-p
    #:http-image-pane-image
    #:http-image-pane-error
    #:http-image-pane-download-process
@@ -44,6 +45,7 @@
 
 (defclass http-image-pane (output-pane)
   ((url         :initarg :url         :reader http-image-pane-url              :initform nil)
+   (best-fit    :initarg :best-fit    :reader http-image-pane-best-fit-p       :initform t)
    (error-p     :initarg :error       :reader http-image-pane-error-p          :initform nil)
    (cache-p     :initarg :cache       :reader http-image-pane-cache-p          :initform nil)
    (wait-image  :initarg :wait-image  :reader http-image-pane-wait-image       :initform nil)
@@ -99,7 +101,7 @@
 (defmethod display-http-image-pane ((pane http-image-pane) &rest bounds)
   "Render the pane for an image being downloaded."
   (declare (ignore bounds))
-  (with-slots (image)
+  (with-slots (image best-fit)
       pane
     (let ((w (gp:port-width pane))
           (h (gp:port-height pane)))
@@ -108,14 +110,15 @@
                  (ih (gp:image-height image))
 
                  ;; calculate the aspect ratio to render at
-                 (aspect (min (min (/ w iw) 1.0)
-                              (min (/ h ih) 1.0)))
+                 (aspect (funcall (if best-fit #'min #'max)
+                                  (min (/ w iw) 1.0)
+                                  (min (/ h ih) 1.0)))
 
                  ;; figure out the final width and height
                  (to-w (* iw aspect))
                  (to-h (* ih aspect))
 
-                 ;; and the target location to render to
+                 ;; and the target location to render to, if fixed, draw in the middle
                  (x (- (/ w 2) (/ to-w 2)))
                  (y (- (/ h 2) (/ to-h 2))))
 
@@ -136,6 +139,15 @@
 
     ;; refresh
     (http-image-pane-refresh pane)))
+
+(defmethod (setf http-image-pane-best-fit-p) (fit (pane http-image-pane))
+  "Change the draw style."
+  (with-slots (best-fit)
+      pane
+    (setf best-fit fit)
+
+    ;; redraw
+    (gp:invalidate-rectangle pane)))
 
 (defmethod http-image-pane-refresh ((pane http-image-pane))
   "Downloads a URL as an image into an image-pane."
