@@ -36,7 +36,8 @@
    :draw-with-buffer t
    :create-callback 'create-http-image-pane
    :destroy-callback 'destroy-http-image-pane
-   :display-callback 'display-http-image-pane))
+   :display-callback 'display-http-image-pane
+   :resize-callback 'gp:invalidate-rectangle))
 
 (defmethod create-http-image-pane ((pane http-image-pane))
   "If the URL has been set, then download it in the background."
