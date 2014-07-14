@@ -98,7 +98,8 @@
       (http-image-pane-clear pane nil)
 
       ;; start downloading the new image
-      (setf process (http-image-download url #'download-complete))
+      (when url
+        (setf process (http-image-download url #'download-complete)))
       
       ;; redraw the pane
       (gp:invalidate-rectangle pane))))
