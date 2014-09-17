@@ -21,6 +21,7 @@
   (:use :cl :lw :mp :http)
   (:export
    #:http-image-type
+   #:http-image-get
    #:http-image-download
    #:http-image-cache-clear
 
@@ -69,30 +70,23 @@
     (second (or (assoc type +image-types+ :test #'string-equal)
                 (assoc ext +image-types+ :test #'string-equal)))))
 
+(defun http-image-get (url &key download-and-wait-p (timeout 30))
+  "Find an already downloaded image or halt and download it now."
+  (with-url (url url)
+    (if-let (external-image (hcl:with-hash-table-locked *http-image-cache*
+                              (gethash (format-url url) *http-image-cache*)))
+        external-image
+      (when download-and-wait-p
+        (http-image-download-internal url timeout)))))
+
 (defun http-image-download (url callback &key reload (timeout 30))
   "Start a process to download the image into an external-image representation."
   (with-url (url url)
     (flet ((download ()
-             (let ((cached-image (hcl:with-hash-table-locked *http-image-cache*
-                                   (gethash (format-url url) *http-image-cache*))))
-
-               ;; if the image hasn't already been cached, download it
-               (unless cached-image
-                 (handler-case
-                     (with-response (resp (http-get url :redirect-limit 2) :timeout timeout :errorp t)
-                       (if-let (type (http-image-type resp))
-                           (let ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp))))
-                             (setf cached-image (make-instance 'gp:external-image :data bytes :type type))
-                             
-                             ;; write the external image to the cache
-                             (hcl:with-hash-table-locked *http-image-cache*
-                               (setf (gethash (format-url url) *http-image-cache*) cached-image)))
-                         (error "Unknown image type.")))
-                   (error (c)
-                     (funcall callback nil c))))
-               
-               ;; successfully downloaded
-               (funcall callback cached-image))))
+             (if-let (cached-image (hcl:with-hash-table-locked *http-image-cache*
+                                     (gethash (format-url url) *http-image-cache*)))
+                 (funcall callback cached-image)
+               (multiple-value-call callback (http-image-download-internal url timeout)))))
 
       ;; clear the cache entry if reloading
       (when reload
@@ -101,3 +95,18 @@
 
       ;; start the download
       (process-run-function "Image download" '() #'download))))
+
+(defun http-image-download-internal (url timeout)
+  "Return a downloaded image or NIL and a condition."
+  (handler-case
+      (with-response (resp (http-get url :redirect-limit 2) :timeout timeout :errorp t)
+        (if-let (type (http-image-type resp))
+            (let* ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp)))
+                   (image (make-instance 'gp:external-image :data bytes :type type)))
+              
+              ;; write the external image to the cache
+              (hcl:with-hash-table-locked *http-image-cache*
+                (setf (gethash (format-url url) *http-image-cache*) image)))
+          (error "Unknown image type.")))
+    (error (c)
+      (values nil c))))

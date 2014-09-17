@@ -91,7 +91,7 @@
 
              ;; called on an error or when the download completes
              (download-complete (external-image &optional condition)
-               (if condition
+               (if (null external-image)
                    (setf error condition)
                  (capi:apply-in-pane-process pane #'apply-image external-image))))
 
