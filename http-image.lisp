@@ -89,6 +89,8 @@
                (handler-case
                    (funcall callback (http-image-download-internal url timeout))
                  (condition (c)
+                   (hcl:with-hash-table-locked *http-image-cache*
+                     (setf (gethash (format-url url) *http-image-cache*) nil))
                    (funcall callback nil c))))))
 
       ;; clear the cache entry if reloading
