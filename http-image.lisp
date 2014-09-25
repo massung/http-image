@@ -106,7 +106,11 @@
   (with-response (resp (http-get url :redirect-limit 2) :timeout timeout :errorp t)
     (if-let (type (http-image-type resp))
         (let* ((bytes (map '(vector (unsigned-byte 8)) #'char-code (response-body resp)))
-               (image (make-instance 'gp:external-image :data bytes :type type)))
+
+               ;; make sure there are bytes that will make an image
+               (image (if (plusp (length bytes))
+                          (make-instance 'gp:external-image :data bytes :type type)
+                        (error "No image data."))))
           
           ;; write the external image to the cache
           (hcl:with-hash-table-locked *http-image-cache*
